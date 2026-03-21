@@ -30,11 +30,8 @@ SSM_PHONE_PATH="${SSM_PHONE_PATH:-/email-parser/notify-phone}"
 echo "==> Installing CDK dependencies..."
 pip install -q -r "$REPO_ROOT/infrastructure/requirements.txt"
 
-# ── Phase 3: CDK bootstrap (idempotent) ───────────────────────────────────
-echo "==> Bootstrapping CDK..."
-(cd "$REPO_ROOT/infrastructure" && cdk bootstrap "aws://${AWS_ACCOUNT_ID}/${AWS_REGION}")
-
-# ── Phase 4: Build Lambda package ─────────────────────────────────────────
+# ── Phase 3: Build Lambda package ─────────────────────────────────────────
+# Must happen before any CDK command since app.py references dist/lambda at synth time.
 echo "==> Building Lambda package..."
 LAMBDA_BUILD_DIR="$REPO_ROOT/dist/lambda"
 rm -rf "$LAMBDA_BUILD_DIR"
@@ -42,6 +39,10 @@ mkdir -p "$LAMBDA_BUILD_DIR"
 pip install -q -r "$REPO_ROOT/lambda/requirements.txt" -t "$LAMBDA_BUILD_DIR"
 cp "$REPO_ROOT/lambda/"*.py "$LAMBDA_BUILD_DIR/"
 echo "    Lambda package built at dist/lambda/"
+
+# ── Phase 4: CDK bootstrap (idempotent) ───────────────────────────────────
+echo "==> Bootstrapping CDK..."
+(cd "$REPO_ROOT/infrastructure" && cdk bootstrap "aws://${AWS_ACCOUNT_ID}/${AWS_REGION}")
 
 # ── Phase 5: Deploy CDK stack ─────────────────────────────────────────────
 echo "==> Deploying CDK stack..."
