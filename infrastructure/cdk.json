@@ -1,0 +1,9 @@
+{
+  "app": "python app.py",
+  "watch": {
+    "exclude": [
+      "**/*.pyc",
+      "__pycache__"
+    ]
+  }
+}
