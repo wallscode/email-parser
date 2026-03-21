@@ -1,0 +1,48 @@
+MIME-Version: 1.0
+Date: Wed, 01 Jan 2026 12:00:00 +0000
+Message-ID: <test-message-id-001@example.com>
+From: sender@example.com
+To: parser@example.com
+Subject: Test invoice for email parser
+Content-Type: multipart/mixed; boundary="boundary_test_001"
+
+--boundary_test_001
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Hi,
+
+Please find attached a sample invoice for your records.
+
+Thanks,
+Test Sender
+
+--boundary_test_001
+Content-Type: text/plain; charset="utf-8"
+Content-Disposition: attachment; filename="invoice.txt"
+Content-Transfer-Encoding: 7bit
+
+INVOICE
+
+Invoice Number: INV-2026-001
+Date: January 1, 2026
+Due Date: January 31, 2026
+
+Bill To:
+  Test Company
+  123 Example Street
+  Anytown, ST 00000
+
+Description                      Amount
+---------------------------------  --------
+Professional Services - January    $1,500.00
+Software License - Annual            $500.00
+
+Subtotal:                          $2,000.00
+Tax (10%):                           $200.00
+TOTAL DUE:                         $2,200.00
+
+Payment due within 30 days.
+Bank transfer details provided on request.
+
+--boundary_test_001--
