@@ -1,6 +1,6 @@
 ---
 id: ep-f4g6
-status: open
+status: closed
 deps: [ep-b2c4]
 links: [ep-d3e5]
 created: 2026-03-21T00:00:00Z
