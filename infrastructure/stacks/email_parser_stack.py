@@ -1,5 +1,4 @@
 import os
-import subprocess
 import sys
 
 import aws_cdk as cdk
@@ -20,40 +19,7 @@ from constructs import Construct
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 import config
 
-LAMBDA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "lambda")
-
-
-class _LocalBundling:
-    """Bundles Lambda dependencies locally with pip — no Docker required.
-
-    CDK tries this first; falls back to the Docker command only if it raises.
-    All Lambda deps are pure Python so this works on any platform.
-    """
-
-    def __init__(self, source_dir: str) -> None:
-        self._source_dir = os.path.realpath(source_dir)
-
-    def try_bundle(self, output_dir: str, *_options) -> bool:
-        try:
-            subprocess.run(
-                [
-                    sys.executable, "-m", "pip", "install",
-                    "-r", os.path.join(self._source_dir, "requirements.txt"),
-                    "-t", output_dir,
-                    "--quiet",
-                ],
-                check=True,
-            )
-            # Copy source files into the output directory
-            for fname in os.listdir(self._source_dir):
-                src = os.path.join(self._source_dir, fname)
-                dst = os.path.join(output_dir, fname)
-                if os.path.isfile(src):
-                    import shutil
-                    shutil.copy2(src, dst)
-            return True
-        except Exception:
-            return False
+LAMBDA_BUILD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "dist", "lambda")
 
 
 class EmailParserStack(cdk.Stack):
@@ -154,18 +120,7 @@ class EmailParserStack(cdk.Stack):
             role=lambda_role,
             timeout=Duration.seconds(300),
             memory_size=512,
-            code=lambda_.Code.from_asset(
-                os.path.realpath(LAMBDA_DIR),
-                bundling=cdk.BundlingOptions(
-                    image=lambda_.Runtime.PYTHON_3_12.bundling_image,
-                    local=_LocalBundling(LAMBDA_DIR),
-                    command=[
-                        "bash",
-                        "-c",
-                        "pip install -r requirements.txt -t /asset-output --quiet && cp -r . /asset-output",
-                    ],
-                ),
-            ),
+            code=lambda_.Code.from_asset(os.path.realpath(LAMBDA_BUILD_DIR)),
             environment={
                 "BUCKET_NAME": config.S3_BUCKET_NAME,
                 "NOTIFY_EMAIL": config.NOTIFY_EMAIL,

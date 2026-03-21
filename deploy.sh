@@ -34,11 +34,20 @@ pip install -q -r "$REPO_ROOT/infrastructure/requirements.txt"
 echo "==> Bootstrapping CDK..."
 (cd "$REPO_ROOT/infrastructure" && cdk bootstrap "aws://${AWS_ACCOUNT_ID}/${AWS_REGION}")
 
-# ── Phase 4: Deploy CDK stack ─────────────────────────────────────────────
+# ── Phase 4: Build Lambda package ─────────────────────────────────────────
+echo "==> Building Lambda package..."
+LAMBDA_BUILD_DIR="$REPO_ROOT/dist/lambda"
+rm -rf "$LAMBDA_BUILD_DIR"
+mkdir -p "$LAMBDA_BUILD_DIR"
+pip install -q -r "$REPO_ROOT/lambda/requirements.txt" -t "$LAMBDA_BUILD_DIR"
+cp "$REPO_ROOT/lambda/"*.py "$LAMBDA_BUILD_DIR/"
+echo "    Lambda package built at dist/lambda/"
+
+# ── Phase 5: Deploy CDK stack ─────────────────────────────────────────────
 echo "==> Deploying CDK stack..."
 (cd "$REPO_ROOT/infrastructure" && cdk deploy --require-approval never)
 
-# ── Phase 5: Store secrets in SSM ─────────────────────────────────────────
+# ── Phase 6: Store secrets in SSM ─────────────────────────────────────────
 echo "==> Checking SSM parameters..."
 
 ssm_param_exists() {
@@ -91,7 +100,7 @@ if [[ "${1:-}" == "--force-ssm" ]]; then
   echo "    SSM parameters updated."
 fi
 
-# ── Phase 6: SNS sandbox verification ─────────────────────────────────────
+# ── Phase 7: SNS sandbox verification ─────────────────────────────────────
 echo "==> Checking SNS SMS sandbox status..."
 
 SANDBOX_STATUS="$(aws sns get-sms-sandbox-account-status \
