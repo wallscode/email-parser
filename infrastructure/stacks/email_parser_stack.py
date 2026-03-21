@@ -201,14 +201,6 @@ class EmailParserStack(cdk.Stack):
             tls_policy=ses.TlsPolicy.REQUIRE,
         )
 
-        # Activate the receipt rule set
-        cdk.CfnResource(
-            self,
-            "ActiveReceiptRuleSet",
-            type="AWS::SES::ReceiptRuleSet",
-            properties={"RuleSetName": rule_set.receipt_rule_set_name},
-        )
-
         # ── Outputs ────────────────────────────────────────────────────────────
         cdk.CfnOutput(self, "BucketName", value=bucket.bucket_name)
         cdk.CfnOutput(self, "LambdaFunctionName", value=email_parser_fn.function_name)

@@ -48,7 +48,14 @@ echo "==> Bootstrapping CDK..."
 echo "==> Deploying CDK stack..."
 (cd "$REPO_ROOT/infrastructure" && cdk deploy --require-approval never)
 
-# ── Phase 6: S3 lifecycle rule ────────────────────────────────────────────
+# ── Phase 6: Activate SES receipt rule set ────────────────────────────────
+echo "==> Activating SES receipt rule set..."
+aws ses set-active-receipt-rule-set \
+  --rule-set-name "email-parser-rules" \
+  --region "$AWS_REGION"
+echo "    Receipt rule set 'email-parser-rules' activated."
+
+# ── Phase 7: S3 lifecycle rule ────────────────────────────────────────────
 echo "==> Configuring S3 lifecycle rule..."
 aws s3api put-bucket-lifecycle-configuration \
   --bucket "$S3_BUCKET_NAME" \
@@ -63,7 +70,7 @@ aws s3api put-bucket-lifecycle-configuration \
   }'
 echo "    Lifecycle rule set: raw-emails/ expires after 30 days."
 
-# ── Phase 7: Store secrets in SSM ─────────────────────────────────────────
+# ── Phase 8: Store secrets in SSM ─────────────────────────────────────────
 echo "==> Checking SSM parameters..."
 
 ssm_param_exists() {
@@ -116,7 +123,7 @@ if [[ "${1:-}" == "--force-ssm" ]]; then
   echo "    SSM parameters updated."
 fi
 
-# ── Phase 8: SNS sandbox verification ─────────────────────────────────────
+# ── Phase 9: SNS sandbox verification ─────────────────────────────────────
 echo "==> Checking SNS SMS sandbox status..."
 
 SANDBOX_STATUS="$(aws sns get-sms-sandbox-account-status \
