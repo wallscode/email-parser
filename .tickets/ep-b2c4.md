@@ -1,6 +1,6 @@
 ---
 id: ep-b2c4
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-03-21T00:00:00Z
