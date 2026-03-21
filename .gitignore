@@ -1,0 +1,22 @@
+# Local environment config — never commit real values
+.env
+.env.local
+.env.*.local
+
+# CDK
+cdk.out/
+infrastructure/cdk.out/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# AWS SAM / CDK staging
+.aws-sam/
+
+# macOS
+.DS_Store
