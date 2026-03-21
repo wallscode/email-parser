@@ -4,7 +4,6 @@ import sys
 import aws_cdk as cdk
 from aws_cdk import (
     Duration,
-    RemovalPolicy,
     aws_iam as iam,
     aws_lambda as lambda_,
     aws_route53 as route53,
@@ -27,31 +26,35 @@ class EmailParserStack(cdk.Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         # ── S3 Bucket ──────────────────────────────────────────────────────────
-        bucket = s3.Bucket(
+        # Import the existing bucket rather than creating a new one.
+        # Lifecycle rules are managed separately via deploy.sh (AWS CLI).
+        bucket = s3.Bucket.from_bucket_name(
             self,
             "EmailBucket",
-            bucket_name=config.S3_BUCKET_NAME,
-            removal_policy=RemovalPolicy.RETAIN,
-            lifecycle_rules=[
-                s3.LifecycleRule(
-                    id="ExpireRawEmails",
-                    prefix="raw-emails/",
-                    expiration=Duration.days(30),
-                )
-            ],
+            config.S3_BUCKET_NAME,
         )
 
-        # SES needs permission to write inbound emails to the bucket
-        bucket.add_to_resource_policy(
-            iam.PolicyStatement(
-                sid="AllowSESPut",
-                principals=[iam.ServicePrincipal("ses.amazonaws.com")],
-                actions=["s3:PutObject"],
-                resources=[bucket.arn_for_objects("raw-emails/*")],
-                conditions={
-                    "StringEquals": {"aws:SourceAccount": self.account}
-                },
-            )
+        # SES needs permission to write inbound emails to the bucket.
+        # from_bucket_name() returns an IBucket so we use CfnBucketPolicy directly.
+        s3.CfnBucketPolicy(
+            self,
+            "EmailBucketPolicy",
+            bucket=config.S3_BUCKET_NAME,
+            policy_document={
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Sid": "AllowSESPut",
+                        "Effect": "Allow",
+                        "Principal": {"Service": "ses.amazonaws.com"},
+                        "Action": "s3:PutObject",
+                        "Resource": f"arn:aws:s3:::{config.S3_BUCKET_NAME}/raw-emails/*",
+                        "Condition": {
+                            "StringEquals": {"aws:SourceAccount": self.account}
+                        },
+                    }
+                ],
+            },
         )
 
         # ── SNS Topic for SMS ──────────────────────────────────────────────────

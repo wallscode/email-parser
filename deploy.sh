@@ -48,7 +48,22 @@ echo "==> Bootstrapping CDK..."
 echo "==> Deploying CDK stack..."
 (cd "$REPO_ROOT/infrastructure" && cdk deploy --require-approval never)
 
-# ── Phase 6: Store secrets in SSM ─────────────────────────────────────────
+# ── Phase 6: S3 lifecycle rule ────────────────────────────────────────────
+echo "==> Configuring S3 lifecycle rule..."
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket "$S3_BUCKET_NAME" \
+  --region "$AWS_REGION" \
+  --lifecycle-configuration '{
+    "Rules": [{
+      "ID": "ExpireRawEmails",
+      "Status": "Enabled",
+      "Filter": {"Prefix": "raw-emails/"},
+      "Expiration": {"Days": 30}
+    }]
+  }'
+echo "    Lifecycle rule set: raw-emails/ expires after 30 days."
+
+# ── Phase 7: Store secrets in SSM ─────────────────────────────────────────
 echo "==> Checking SSM parameters..."
 
 ssm_param_exists() {
@@ -101,7 +116,7 @@ if [[ "${1:-}" == "--force-ssm" ]]; then
   echo "    SSM parameters updated."
 fi
 
-# ── Phase 7: SNS sandbox verification ─────────────────────────────────────
+# ── Phase 8: SNS sandbox verification ─────────────────────────────────────
 echo "==> Checking SNS SMS sandbox status..."
 
 SANDBOX_STATUS="$(aws sns get-sms-sandbox-account-status \
