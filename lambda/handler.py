@@ -1,11 +1,14 @@
 import base64
+import html
 import io
 import json
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from email import policy as email_policy
 from email.parser import BytesParser
+from email.utils import parseaddr
 
 import anthropic
 import boto3
@@ -20,9 +23,11 @@ BUCKET_NAME = os.environ["BUCKET_NAME"]
 NOTIFY_EMAIL = os.environ["NOTIFY_EMAIL"]
 SENDER_EMAIL = os.environ["SENDER_EMAIL"]
 SSM_API_KEY_PATH = os.environ["SSM_API_KEY_PATH"]
-SSM_PHONE_PATH = os.environ["SSM_PHONE_PATH"]
 CLAUDE_MODEL = os.environ["CLAUDE_MODEL"]
-SNS_TOPIC_ARN = os.environ["SNS_TOPIC_ARN"]
+# Only mail from these addresses is processed (comma-separated, case-insensitive).
+ALLOWED_SENDERS = {
+    a.strip().lower() for a in os.environ["ALLOWED_SENDERS"].split(",") if a.strip()
+}
 
 SYSTEM_PROMPT = """You are a document analysis assistant. The user will provide the body and attachments
 from an email. Extract and summarize the key information from all documents provided.
@@ -164,18 +169,13 @@ def send_email(subject: str, body_html: str, ses_client) -> None:
     )
 
 
-def send_sms(message: str, sns_client) -> None:
-    # Truncate to 160 characters
-    if len(message) > 160:
-        message = message[:157] + "..."
-    sns_client.publish(TopicArn=SNS_TOPIC_ARN, Message=message)
-
-
 def build_email_body(result: dict, s3_key: str) -> str:
-    summary = result.get("summary", "No summary available.")
+    # Everything from Claude is derived from the forwarded email, which may be written
+    # by anyone — escape it so it can't inject HTML (e.g. phishing links) into the summary.
+    summary = html.escape(str(result.get("summary", "No summary available.")))
     action_items = result.get("action_items", [])
     action_html = (
-        "<ul>" + "".join(f"<li>{item}</li>" for item in action_items) + "</ul>"
+        "<ul>" + "".join(f"<li>{html.escape(str(item))}</li>" for item in action_items) + "</ul>"
         if action_items
         else "<p>None</p>"
     )
@@ -191,9 +191,44 @@ def build_email_body(result: dict, s3_key: str) -> str:
     <p>{summary}</p>
     <h3>Action Items</h3>
     {action_html}
-    <p style="color:grey;font-size:small;">Full analysis saved to S3: {s3_key}</p>
+    <p style="color:grey;font-size:small;">Full analysis saved to S3: {html.escape(s3_key)}</p>
     </body></html>
     """
+
+
+# ── Sender allowlist ───────────────────────────────────────────────────────
+
+
+def sender_is_allowed(msg) -> bool:
+    """Process only mail from an allowlisted address that SES authenticated.
+
+    Anyone can email the parser address, and each processed email costs a Claude
+    call. The From header alone is trivially forged, so also require SES's own
+    DMARC verdict for the sender's domain (SPF or DKIM passed and aligned with the
+    From domain). SES prepends its Authentication-Results header, so only the
+    first one is trusted; any further down could have been written by the sender.
+    """
+    _, address = parseaddr(str(msg.get("From", "")))
+    address = address.lower()
+    if address not in ALLOWED_SENDERS:
+        logger.warning("Dropping email from non-allowlisted sender: %s", address or "(none)")
+        return False
+
+    if str(msg.get("X-SES-Virus-Verdict", "")).strip().upper() == "FAIL":
+        logger.warning("Dropping email from %s: SES virus scan failed", address)
+        return False
+
+    results = msg.get_all("Authentication-Results") or []
+    ses_result = str(results[0]) if results else ""
+    domain = re.escape(address.rsplit("@", 1)[-1])
+    if not (
+        ses_result.strip().lower().startswith("amazonses.com")
+        and re.search(rf"\bdmarc=pass\b[^;]*\bheader\.from={domain}\b", ses_result, re.IGNORECASE)
+    ):
+        logger.warning("Dropping email from %s: SES authentication did not pass", address)
+        return False
+
+    return True
 
 
 # ── Lambda entry point ─────────────────────────────────────────────────────
@@ -202,7 +237,6 @@ def build_email_body(result: dict, s3_key: str) -> str:
 def handler(event, context):
     s3_client = boto3.client("s3")
     ses_client = boto3.client("ses")
-    sns_client = boto3.client("sns")
     ssm_client = boto3.client("ssm")
 
     record = event["Records"][0]["s3"]
@@ -214,6 +248,9 @@ def handler(event, context):
     response = s3_client.get_object(Bucket=bucket, Key=key)
     raw_email = response["Body"].read()
     msg = BytesParser(policy=email_policy.default).parsebytes(raw_email)
+
+    if not sender_is_allowed(msg):
+        return
 
     message_id = msg.get("Message-ID", key.split("/")[-1])
     subject = msg.get("subject", "(no subject)")
@@ -267,11 +304,6 @@ def handler(event, context):
         email_subject = f"[Email Parser] {subject}"
         send_email(email_subject, build_email_body(result, s3_key), ses_client)
         logger.info("Summary email sent to %s", NOTIFY_EMAIL)
-
-        # Send SMS
-        sms_body = f"Email parsed: {subject[:80]} — {result.get('summary', '')}"
-        send_sms(sms_body, sns_client)
-        logger.info("SMS notification sent")
 
     except Exception:
         logger.exception("Failed to process email %s", message_id)

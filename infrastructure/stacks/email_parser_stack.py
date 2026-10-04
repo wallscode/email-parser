@@ -11,7 +11,6 @@ from aws_cdk import (
     aws_s3_notifications as s3n,
     aws_ses as ses,
     aws_ses_actions as ses_actions,
-    aws_sns as sns,
 )
 from constructs import Construct
 
@@ -57,13 +56,6 @@ class EmailParserStack(cdk.Stack):
             },
         )
 
-        # ── SNS Topic for SMS ──────────────────────────────────────────────────
-        sms_topic = sns.Topic(
-            self,
-            "SmsTopic",
-            display_name="Email Parser SMS Notifications",
-        )
-
         # ── Lambda IAM Role ────────────────────────────────────────────────────
         lambda_role = iam.Role(
             self,
@@ -105,17 +97,9 @@ class EmailParserStack(cdk.Stack):
                 actions=["ssm:GetParameter"],
                 resources=[
                     f"arn:aws:ssm:{config.AWS_REGION}:{config.AWS_ACCOUNT_ID}:parameter{config.SSM_API_KEY_PATH}",
-                    f"arn:aws:ssm:{config.AWS_REGION}:{config.AWS_ACCOUNT_ID}:parameter{config.SSM_PHONE_PATH}",
                 ],
             )
         )
-        lambda_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["sns:Publish"],
-                resources=[sms_topic.topic_arn],
-            )
-        )
-
         # ── Lambda Function ────────────────────────────────────────────────────
         email_parser_fn = lambda_.Function(
             self,
@@ -132,9 +116,8 @@ class EmailParserStack(cdk.Stack):
                 "NOTIFY_EMAIL": config.NOTIFY_EMAIL,
                 "SENDER_EMAIL": config.PARSER_EMAIL,
                 "SSM_API_KEY_PATH": config.SSM_API_KEY_PATH,
-                "SSM_PHONE_PATH": config.SSM_PHONE_PATH,
                 "CLAUDE_MODEL": config.CLAUDE_MODEL,
-                "SNS_TOPIC_ARN": sms_topic.topic_arn,
+                "ALLOWED_SENDERS": config.ALLOWED_SENDERS,
             },
         )
 
@@ -198,4 +181,3 @@ class EmailParserStack(cdk.Stack):
         # ── Outputs ────────────────────────────────────────────────────────────
         cdk.CfnOutput(self, "BucketName", value=bucket.bucket_name)
         cdk.CfnOutput(self, "LambdaFunctionName", value=email_parser_fn.function_name)
-        cdk.CfnOutput(self, "SnsTopicArn", value=sms_topic.topic_arn)

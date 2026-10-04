@@ -12,8 +12,8 @@ set -euo pipefail
 #   Initial / infrastructure deploy (admin credentials only):
 #     source .env && bash deploy.sh --initial
 #   Creates/configures the S3 bucket, deploys every resource, then does the one-time account
-#   setup: receipt rule activation, SSM secrets, SES/SNS sandbox verification, SMS
-#   subscription, and stack protection. Run scripts/setup-iam.sh first.
+#   setup: receipt rule activation, the Claude API key in SSM, SES sandbox verification
+#   of the notify address, and stack protection. Run scripts/setup-iam.sh first.
 
 MODE="routine"
 if [[ "${1:-}" == "--initial" ]]; then
@@ -27,7 +27,7 @@ STACK_NAME="EmailParserStack"
 echo "==> Validating environment..."
 required_vars=(
   AWS_ACCOUNT_ID AWS_REGION
-  DOMAIN PARSER_EMAIL_USER NOTIFY_EMAIL
+  DOMAIN PARSER_EMAIL_USER NOTIFY_EMAIL ALLOWED_SENDERS
   S3_BUCKET_NAME HOSTED_ZONE_ID
 )
 for var in "${required_vars[@]}"; do
@@ -40,7 +40,6 @@ done
 echo "    All required variables present."
 
 SSM_API_KEY_PATH="${SSM_API_KEY_PATH:-/email-parser/claude-api-key}"
-SSM_PHONE_PATH="${SSM_PHONE_PATH:-/email-parser/notify-phone}"
 DEPLOYER_CFN_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/email-parser-cloudformation"
 ADMIN_CFN_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/cdk-hnb659fds-cfn-exec-role-${AWS_ACCOUNT_ID}-${AWS_REGION}"
 
@@ -185,18 +184,6 @@ else
   echo "    Claude API key stored."
 fi
 
-if ssm_param_exists "$SSM_PHONE_PATH"; then
-  echo "    $SSM_PHONE_PATH already exists — skipping."
-else
-  read -rsp "Enter your notify phone number (E.164 format, e.g. +12125551234): " NEW_PHONE
-  echo
-  aws ssm put-parameter --name "$SSM_PHONE_PATH" --value "$NEW_PHONE" \
-    --type SecureString --region "$AWS_REGION" --overwrite > /dev/null
-  echo "    Notify phone stored."
-fi
-NOTIFY_PHONE="$(aws ssm get-parameter --name "$SSM_PHONE_PATH" --with-decryption \
-  --region "$AWS_REGION" --query "Parameter.Value" --output text)"
-
 # Phase 9: SES sandbox — summary emails can only go to verified addresses
 echo "==> Checking SES sending status..."
 SES_PRODUCTION="$(aws sesv2 get-account --region "$AWS_REGION" \
@@ -210,53 +197,6 @@ else
   aws sesv2 create-email-identity --email-identity "$NOTIFY_EMAIL" --region "$AWS_REGION" \
     > /dev/null 2>&1 || true   # already pending
   echo "    SES sandbox: verification email sent to the notify address — click the link in it."
-fi
-
-# Phase 10: SNS SMS sandbox — the phone must be verified before it can receive SMS.
-# Re-run with SMS_OTP=<code> to finish verification.
-echo "==> Checking SNS SMS sandbox status..."
-SANDBOX_STATUS="$(aws sns get-sms-sandbox-account-status --region "$AWS_REGION" \
-  --query "IsInSandbox" --output text)"
-if [[ "$SANDBOX_STATUS" == "True" ]]; then
-  PHONE_STATUS="$(aws sns list-sms-sandbox-phone-numbers --region "$AWS_REGION" \
-    --query "PhoneNumbers[?PhoneNumber=='${NOTIFY_PHONE}'].Status | [0]" --output text)"
-  if [[ "$PHONE_STATUS" == "Verified" ]]; then
-    echo "    Notify phone already verified."
-  elif [[ -n "${SMS_OTP:-}" ]]; then
-    aws sns verify-sms-sandbox-phone-number --phone-number "$NOTIFY_PHONE" \
-      --one-time-password "$SMS_OTP" --region "$AWS_REGION"
-    echo "    Notify phone verified."
-  else
-    if [[ "$PHONE_STATUS" == "Pending" ]]; then
-      echo "    Phone verification is pending. If a code arrived, finish with:"
-      echo "      SMS_OTP=<code> bash deploy.sh --initial"
-      echo "    If none arrived, the account likely has no SMS origination number yet."
-    elif aws sns create-sms-sandbox-phone-number \
-        --phone-number "$NOTIFY_PHONE" --region "$AWS_REGION"; then
-      echo "    A verification code was sent to the notify phone."
-      echo "    Finish with: SMS_OTP=<code> bash deploy.sh --initial"
-    else
-      # Most often: no origination identity (e.g. a registered toll-free number) exists yet,
-      # which AWS requires for sending SMS to US numbers.
-      echo "    WARNING: could not start phone verification — SMS won't be delivered until this is fixed."
-    fi
-  fi
-else
-  echo "    Account is not in the SMS sandbox."
-fi
-
-# Phase 11: Subscribe the notify phone to the SMS topic
-echo "==> Checking SMS topic subscription..."
-TOPIC_ARN="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$AWS_REGION" \
-  --query "Stacks[0].Outputs[?OutputKey=='SnsTopicArn'].OutputValue | [0]" --output text)"
-SUBSCRIBED="$(aws sns list-subscriptions-by-topic --topic-arn "$TOPIC_ARN" --region "$AWS_REGION" \
-  --query "length(Subscriptions[?Protocol=='sms' && Endpoint=='${NOTIFY_PHONE}'])" --output text)"
-if [[ "$SUBSCRIBED" != "0" ]]; then
-  echo "    Notify phone already subscribed."
-else
-  aws sns subscribe --topic-arn "$TOPIC_ARN" --protocol sms \
-    --notification-endpoint "$NOTIFY_PHONE" --region "$AWS_REGION" > /dev/null
-  echo "    Notify phone subscribed to the SMS topic."
 fi
 
 echo ""

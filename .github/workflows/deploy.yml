@@ -63,10 +63,10 @@ jobs:
           DOMAIN: ${{ secrets.DOMAIN }}
           PARSER_EMAIL_USER: ${{ secrets.PARSER_EMAIL_USER }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          ALLOWED_SENDERS: ${{ secrets.ALLOWED_SENDERS }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
           HOSTED_ZONE_ID: ${{ secrets.HOSTED_ZONE_ID }}
           SSM_API_KEY_PATH: ${{ secrets.SSM_API_KEY_PATH }}
-          SSM_PHONE_PATH: ${{ secrets.SSM_PHONE_PATH }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION: '1'
         run: bash deploy.sh

@@ -21,7 +21,6 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IAM_DIR="$REPO_ROOT/iam"
 
 export SSM_API_KEY_PATH="${SSM_API_KEY_PATH:-/email-parser/claude-api-key}"
-export SSM_PHONE_PATH="${SSM_PHONE_PATH:-/email-parser/notify-phone}"
 export DEPLOYER_USER="${DEPLOYER_USER:-email-parser-deployer}"
 export CFN_ROLE="email-parser-cloudformation"
 export STACK_NAME="EmailParserStack"
