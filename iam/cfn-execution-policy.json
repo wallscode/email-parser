@@ -19,6 +19,19 @@
         "lambda:List*"
       ],
       "Resource": "arn:aws:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:email-parser"
+    },
+    {
+      "Sid": "ResolveParserRoleArn",
+      "Effect": "Allow",
+      "Action": "iam:GetRole",
+      "Resource": "arn:aws:iam::{{ACCOUNT_ID}}:role/{{STACK_NAME}}-LambdaRole*"
+    },
+    {
+      "Sid": "KeepParserRoleOnUpdate",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::{{ACCOUNT_ID}}:role/{{STACK_NAME}}-LambdaRole*",
+      "Condition": {"StringEquals": {"iam:PassedToService": "lambda.amazonaws.com"}}
     }
   ]
 }

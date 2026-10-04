@@ -154,10 +154,8 @@ trap 'stack_exists && lock_stack' EXIT
 lock_stack
 trap - EXIT
 
-echo "==> Protecting stack..."
-aws cloudformation update-termination-protection --enable-termination-protection \
-  --stack-name "$STACK_NAME" --region "$AWS_REGION" > /dev/null
-echo "    Stack policy set (only the Lambda function can be updated) and termination protection on."
+echo "    Stack policy set: routine deploys can only update the Lambda function."
+echo "    (Termination protection is declared in infrastructure/app.py.)"
 
 # Phase 7: Activate SES receipt rule set
 echo "==> Activating SES receipt rule set..."

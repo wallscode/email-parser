@@ -18,6 +18,8 @@ EmailParserStack(
     # roles. CloudFormation runs as the role passed via `cdk deploy --role-arn` (see deploy.sh).
     # Assets go under a project prefix so the deployer can only write there.
     synthesizer=cdk.CliCredentialsStackSynthesizer(bucket_prefix="email-parser/"),
+    # Declared here so CDK never tries to change it: the deployer isn't allowed to.
+    termination_protection=True,
 )
 
 app.synth()
