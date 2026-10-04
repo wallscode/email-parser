@@ -23,3 +23,6 @@ venv/
 
 # macOS
 .DS_Store
+
+# CDK lookup cache (contains account ID and domain)
+infrastructure/cdk.context.json

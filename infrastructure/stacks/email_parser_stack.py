@@ -92,8 +92,11 @@ class EmailParserStack(cdk.Stack):
             iam.PolicyStatement(
                 actions=["ses:SendEmail", "ses:SendRawEmail"],
                 resources=["*"],
+                # Pin sender and recipient here (admin-managed) so that changing the
+                # function's environment variables can't redirect summaries elsewhere.
                 conditions={
-                    "StringLike": {"ses:FromAddress": f"*@{config.DOMAIN}"}
+                    "StringLike": {"ses:FromAddress": f"*@{config.DOMAIN}"},
+                    "ForAllValues:StringEquals": {"ses:Recipients": [config.NOTIFY_EMAIL]},
                 },
             )
         )
@@ -142,30 +145,21 @@ class EmailParserStack(cdk.Stack):
             s3.NotificationKeyFilter(prefix="raw-emails/"),
         )
 
-        # ── SES Domain Identity + DKIM ─────────────────────────────────────────
-        email_identity = ses.EmailIdentity(
-            self,
-            "EmailIdentity",
-            identity=ses.Identity.domain(config.DOMAIN),
-        )
-
         # ── Route 53 ───────────────────────────────────────────────────────────
-        hosted_zone = route53.HostedZone.from_lookup(
+        hosted_zone = route53.HostedZone.from_hosted_zone_attributes(
             self,
             "HostedZone",
-            domain_name=config.DOMAIN,
+            hosted_zone_id=config.HOSTED_ZONE_ID,
+            zone_name=config.DOMAIN,
         )
 
-        # DKIM CNAME records
-        for i, dkim_record in enumerate(email_identity.dkim_records):
-            route53.CnameRecord(
-                self,
-                f"DkimRecord{i}",
-                zone=hosted_zone,
-                record_name=dkim_record.name,
-                domain_name=dkim_record.value,
-                ttl=Duration.seconds(1800),
-            )
+        # ── SES Domain Identity + DKIM ─────────────────────────────────────────
+        # public_hosted_zone() creates the DKIM CNAME records in the zone for us.
+        ses.EmailIdentity(
+            self,
+            "EmailIdentity",
+            identity=ses.Identity.public_hosted_zone(hosted_zone),
+        )
 
         # MX record pointing to SES inbound endpoint
         route53.MxRecord(

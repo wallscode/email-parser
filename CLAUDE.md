@@ -29,31 +29,45 @@ Outlook → SES (parser@yourdomain.com) → S3 (raw-emails/) → Lambda
 
 ```
 email-parser/
-├── config.py                          # User config — MUST be edited before deploy
-├── deploy.sh                          # Orchestrates full deployment
+├── config.py                          # Reads all settings from env vars (placeholders only)
+├── deploy.sh                          # Routine deploy (deployer) or --initial (admin)
+├── scripts/setup-iam.sh               # Admin-only: creates deployer user + CloudFormation role
+├── iam/                               # Policy templates ({{PLACEHOLDERS}} filled at run time)
+│   ├── deployer-policy.json           # email-parser-deployer user
+│   ├── cfn-execution-policy.json      # email-parser-cloudformation role
+│   ├── cfn-trust-policy.json
+│   ├── stack-policy.json              # Stack policy: only the Lambda function may be updated
+│   └── stack-policy-admin-update.json # Temporarily applied during admin deploys
 ├── infrastructure/
-│   ├── app.py                         # CDK app entry point
-│   ├── requirements.txt               # CDK deps (aws-cdk-lib, constructs)
+│   ├── app.py                         # CDK app entry point (CliCredentialsStackSynthesizer)
+│   ├── requirements.txt               # Pinned CDK deps
 │   └── stacks/email_parser_stack.py   # All AWS resources defined here
 └── lambda/
     ├── handler.py                      # Core Lambda logic
     └── requirements.txt               # Lambda deps (anthropic, pypdf, python-docx, openpyxl)
 ```
 
+## IAM Model (least privilege)
+
+All routine AWS work uses the `email-parser-deployer` IAM user, signed in with `aws login`. It has no access keys. It can only:
+- deploy `EmailParserStack` through change sets that use the `email-parser-cloudformation` role. That role can only update the `email-parser` function's code and configuration.
+- upload CDK assets under the `email-parser/` prefix
+- run tests: put to `raw-emails/`, read `parsed-output/`, invoke the function, read its logs
+
+Everything else is admin-only and done with `deploy.sh --initial`: S3 bucket settings, IAM roles, DNS, SES, the bucket policy, SNS, SSM secrets and the stack policy. A stack policy and termination protection back this up. A routine deploy that touches any other resource fails and rolls back, which is intended.
+
+If a deploy fails with AccessDenied, add the narrowest possible action to the matching file in `iam/`. Applying it needs an admin to re-run `scripts/setup-iam.sh`.
+
 ## Key Commands
 
 ```bash
-# Install CDK infrastructure dependencies
-pip install -r infrastructure/requirements.txt
+# Routine deploy (email-parser-deployer)
+source .env && bash deploy.sh
 
-# Bootstrap CDK (first time only)
-cdk bootstrap aws://ACCOUNT_ID/REGION
-
-# Deploy everything
-bash deploy.sh
-
-# Deploy CDK stack only (skips SSM/SNS setup)
-cdk deploy --require-approval never
+# Admin only: create/refresh IAM, then full infrastructure deploy + one-time setup
+source .env && bash scripts/setup-iam.sh
+source .env && bash deploy.sh --initial
+SMS_OTP=123456 bash deploy.sh --initial   # finish SMS sandbox phone verification
 ```
 
 ## Public Repo Safety
@@ -90,6 +104,7 @@ AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 AWS_ACCOUNT_ID = os.environ['AWS_ACCOUNT_ID']
 CLAUDE_MODEL = os.environ.get('CLAUDE_MODEL', 'claude-sonnet-4-20250514')
 S3_BUCKET_NAME = os.environ['S3_BUCKET_NAME']
+HOSTED_ZONE_ID = os.environ['HOSTED_ZONE_ID']
 SSM_API_KEY_PATH = os.environ.get('SSM_API_KEY_PATH', '/email-parser/claude-api-key')
 SSM_PHONE_PATH = os.environ.get('SSM_PHONE_PATH', '/email-parser/notify-phone')
 ```
@@ -115,4 +130,5 @@ Test fixtures (`test-event.json`, `test.eml`) must use placeholder values only �
 - AWS CDK installed: `npm install -g aws-cdk`
 - Python 3.12+
 - Domain hosted in Route 53 (no existing MX record)
+- For SMS to US numbers: an SNS/End User Messaging origination identity (e.g. registered toll-free number)
 - Claude API key from console.anthropic.com

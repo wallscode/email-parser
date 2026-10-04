@@ -14,6 +14,10 @@ EmailParserStack(
     app,
     "EmailParserStack",
     env=cdk.Environment(account=config.AWS_ACCOUNT_ID, region=config.AWS_REGION),
+    # Deploy with the caller's own credentials instead of CDK's account-wide bootstrap
+    # roles. CloudFormation runs as the role passed via `cdk deploy --role-arn` (see deploy.sh).
+    # Assets go under a project prefix so the deployer can only write there.
+    synthesizer=cdk.CliCredentialsStackSynthesizer(bucket_prefix="email-parser/"),
 )
 
 app.synth()
