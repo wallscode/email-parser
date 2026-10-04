@@ -32,8 +32,11 @@ email-parser/
 ├── config.py                          # Reads all settings from env vars (placeholders only)
 ├── deploy.sh                          # Routine deploy (deployer) or --initial (admin)
 ├── scripts/setup-iam.sh               # Admin-only: creates deployer user + CloudFormation role
+├── .github/workflows/deploy.yml       # CI: deploys on every push to main (OIDC, no stored keys)
 ├── iam/                               # Policy templates ({{PLACEHOLDERS}} filled at run time)
-│   ├── deployer-policy.json           # email-parser-deployer user
+│   ├── deploy-policy.json             # Shared deploy permissions (deployer user + GitHub role)
+│   ├── deployer-policy.json           # email-parser-deployer extras: testing, own password/MFA
+│   ├── github-trust-policy.json       # GitHub role: this repo's "production" environment only
 │   ├── cfn-execution-policy.json      # email-parser-cloudformation role
 │   ├── cfn-trust-policy.json
 │   ├── stack-policy.json              # Stack policy: only the Lambda function may be updated
@@ -54,6 +57,8 @@ All routine AWS work uses the `email-parser-deployer` IAM user, signed in with `
 - upload CDK assets under the `email-parser/` prefix
 - run tests: put to `raw-emails/`, read `parsed-output/`, invoke the function, read its logs
 
+Every push to `main` deploys the same way through GitHub Actions. The workflow assumes `email-parser-github-deploy` over OIDC, so no AWS keys are stored in GitHub. That role has the same deploy permissions as the deployer user, minus testing. It trusts only this repo's `production` environment, which only `main` may use. A "Protect main" ruleset blocks force-pushes and deletion of `main`.
+
 Everything else is admin-only and done with `deploy.sh --initial`: S3 bucket settings, IAM roles, DNS, SES, the bucket policy, SNS, SSM secrets and the stack policy. A stack policy and termination protection back this up. A routine deploy that touches any other resource fails and rolls back, which is intended.
 
 If a deploy fails with AccessDenied, add the narrowest possible action to the matching file in `iam/`. Applying it needs an admin to re-run `scripts/setup-iam.sh`.
@@ -61,7 +66,7 @@ If a deploy fails with AccessDenied, add the narrowest possible action to the ma
 ## Key Commands
 
 ```bash
-# Routine deploy (email-parser-deployer)
+# Routine deploy: push to main (GitHub Actions), or locally as email-parser-deployer
 source .env && bash deploy.sh
 
 # Admin only: create/refresh IAM, then full infrastructure deploy + one-time setup

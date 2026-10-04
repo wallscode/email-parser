@@ -9,8 +9,11 @@ set -euo pipefail
 # Creates:
 #   - email-parser-cloudformation  role CloudFormation runs as for routine deploys;
 #                                  can only update the email-parser function's code/config
+#   - EmailParserDeploy            policy: deploy EmailParserStack using the role above, nothing else
 #   - email-parser-deployer        IAM user, console sign-in only (for `aws login`), no access keys;
-#                                  can only deploy EmailParserStack using the role above, plus testing
+#                                  EmailParserDeploy + testing and its own password/MFA
+#   - email-parser-github-deploy   role for GitHub Actions (OIDC, no stored keys): EmailParserDeploy
+#                                  only, and only from this repo's "production" environment
 #
 # Safe to re-run: policies get a new default version, an existing user/login is kept.
 
@@ -24,7 +27,11 @@ export CFN_ROLE="email-parser-cloudformation"
 export STACK_NAME="EmailParserStack"
 export QUALIFIER="hnb659fds"   # CDK default bootstrap qualifier (asset bucket name)
 CFN_POLICY="EmailParserCloudFormation"
+DEPLOY_POLICY="EmailParserDeploy"
 DEPLOYER_POLICY="EmailParserDeployer"
+GITHUB_ROLE="email-parser-github-deploy"
+# owner/repo, from the origin remote unless set explicitly
+export GITHUB_REPO="${GITHUB_REPO:-$(git -C "$REPO_ROOT" remote get-url origin | sed -E 's#^(https://github.com/|git@github.com:)##; s#\.git$##')}"
 
 # ── Validate inputs ────────────────────────────────────────────────────────
 # These values are written into IAM policies, so reject anything that could
@@ -44,6 +51,7 @@ validate AWS_ACCOUNT_ID   '^[0-9]{12}$'
 validate AWS_REGION       '^[a-z]{2}(-[a-z]+)+-[0-9]$'
 validate S3_BUCKET_NAME   '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
 validate DEPLOYER_USER    '^[A-Za-z0-9+=,.@_-]{1,64}$'
+validate GITHUB_REPO      '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
 
 echo "==> Checking credentials..."
 CALLER_ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
@@ -113,15 +121,23 @@ fi
 aws iam attach-role-policy --role-name "$CFN_ROLE" \
   --policy-arn "arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${CFN_POLICY}"
 
-# ── Phase 2: Deployer user (console sign-in only, no access keys) ──────────
+# ── Phase 2: Shared deploy policy ──────────────────────────────────────────
+echo "==> Deploy policy..."
+upsert_policy "$DEPLOY_POLICY" "$IAM_DIR/deploy-policy.json"
+
+# ── Phase 3: Deployer user (console sign-in only, no access keys) ──────────
 echo "==> Deployer user..."
-upsert_policy "$DEPLOYER_POLICY" "$IAM_DIR/deployer-policy.json"
 if aws iam get-user --user-name "$DEPLOYER_USER" > /dev/null 2>&1; then
   echo "    User $DEPLOYER_USER already exists."
 else
   aws iam create-user --user-name "$DEPLOYER_USER" > /dev/null
   echo "    Created user $DEPLOYER_USER"
 fi
+# Attach the deploy policy before narrowing the user's own policy, so the user
+# never loses deploy access partway through a re-run.
+aws iam attach-user-policy --user-name "$DEPLOYER_USER" \
+  --policy-arn "arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${DEPLOY_POLICY}"
+upsert_policy "$DEPLOYER_POLICY" "$IAM_DIR/deployer-policy.json"
 aws iam attach-user-policy --user-name "$DEPLOYER_USER" \
   --policy-arn "arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${DEPLOYER_POLICY}"
 
@@ -154,7 +170,33 @@ PY
   echo "    Initial password written to $CREDS_FILE (readable only by you)."
 fi
 
+# ── Phase 4: GitHub Actions deploy role (OIDC) ─────────────────────────────
+# One GitHub OIDC provider exists per account and other projects may share it,
+# so only create it when missing.
+echo "==> GitHub Actions role..."
+OIDC_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
+if aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$OIDC_ARN" > /dev/null 2>&1; then
+  echo "    GitHub OIDC provider already exists (shared)."
+else
+  aws iam create-open-id-connect-provider --url https://token.actions.githubusercontent.com \
+    --client-id-list sts.amazonaws.com > /dev/null
+  echo "    Created GitHub OIDC provider."
+fi
+TRUST_DOC="$(render "$IAM_DIR/github-trust-policy.json")"
+if aws iam get-role --role-name "$GITHUB_ROLE" > /dev/null 2>&1; then
+  aws iam update-assume-role-policy --role-name "$GITHUB_ROLE" --policy-document "$TRUST_DOC"
+  echo "    Role $GITHUB_ROLE already exists — trust policy refreshed."
+else
+  aws iam create-role --role-name "$GITHUB_ROLE" --max-session-duration 3600 \
+    --description "email-parser deploys from GitHub Actions (production environment only)" \
+    --assume-role-policy-document "$TRUST_DOC" > /dev/null
+  echo "    Created role $GITHUB_ROLE (trusts ${GITHUB_REPO}, environment: production)"
+fi
+aws iam attach-role-policy --role-name "$GITHUB_ROLE" \
+  --policy-arn "arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${DEPLOY_POLICY}"
+
 echo ""
 echo "✓ IAM setup complete."
 echo "    CloudFormation role: arn:aws:iam::${AWS_ACCOUNT_ID}:role/${CFN_ROLE}"
 echo "    Deployer user:       arn:aws:iam::${AWS_ACCOUNT_ID}:user/${DEPLOYER_USER}"
+echo "    GitHub deploy role:  arn:aws:iam::${AWS_ACCOUNT_ID}:role/${GITHUB_ROLE}"

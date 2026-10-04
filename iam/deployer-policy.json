@@ -2,68 +2,6 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "CreateChangeSetsOnlyWithProjectRole",
-      "Effect": "Allow",
-      "Action": "cloudformation:CreateChangeSet",
-      "Resource": "arn:aws:cloudformation:{{REGION}}:{{ACCOUNT_ID}}:stack/{{STACK_NAME}}/*",
-      "Condition": {"StringEquals": {"cloudformation:RoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/{{CFN_ROLE}}"}}
-    },
-    {
-      "Sid": "RunAndInspectChangeSets",
-      "Effect": "Allow",
-      "Action": [
-        "cloudformation:DescribeChangeSet",
-        "cloudformation:ExecuteChangeSet",
-        "cloudformation:DeleteChangeSet",
-        "cloudformation:DescribeStacks",
-        "cloudformation:DescribeStackEvents",
-        "cloudformation:DescribeEvents",
-        "cloudformation:DescribeStackResources",
-        "cloudformation:ListStackResources",
-        "cloudformation:GetTemplate",
-        "cloudformation:GetTemplateSummary"
-      ],
-      "Resource": "arn:aws:cloudformation:{{REGION}}:{{ACCOUNT_ID}}:stack/{{STACK_NAME}}/*"
-    },
-    {
-      "Sid": "PassProjectRoleToCloudFormation",
-      "Effect": "Allow",
-      "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::{{ACCOUNT_ID}}:role/{{CFN_ROLE}}",
-      "Condition": {"StringEquals": {"iam:PassedToService": "cloudformation.amazonaws.com"}}
-    },
-    {
-      "Sid": "ReadBootstrapInfo",
-      "Effect": "Allow",
-      "Action": "cloudformation:DescribeStacks",
-      "Resource": "arn:aws:cloudformation:{{REGION}}:{{ACCOUNT_ID}}:stack/CDKToolkit/*"
-    },
-    {
-      "Sid": "ReadBootstrapVersion",
-      "Effect": "Allow",
-      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
-      "Resource": "arn:aws:ssm:{{REGION}}:{{ACCOUNT_ID}}:parameter/cdk-bootstrap/{{QUALIFIER}}/version"
-    },
-    {
-      "Sid": "UploadProjectAssets",
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject"],
-      "Resource": "arn:aws:s3:::cdk-{{QUALIFIER}}-assets-{{ACCOUNT_ID}}-{{REGION}}/email-parser/*"
-    },
-    {
-      "Sid": "ListProjectAssets",
-      "Effect": "Allow",
-      "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::cdk-{{QUALIFIER}}-assets-{{ACCOUNT_ID}}-{{REGION}}",
-      "Condition": {"StringLike": {"s3:prefix": ["email-parser/*"]}}
-    },
-    {
-      "Sid": "LocateAssetsBucket",
-      "Effect": "Allow",
-      "Action": "s3:GetBucketLocation",
-      "Resource": "arn:aws:s3:::cdk-{{QUALIFIER}}-assets-{{ACCOUNT_ID}}-{{REGION}}"
-    },
-    {
       "Sid": "TestUploadEmail",
       "Effect": "Allow",
       "Action": "s3:PutObject",
@@ -80,12 +18,21 @@
       "Effect": "Allow",
       "Action": "s3:ListBucket",
       "Resource": "arn:aws:s3:::{{BUCKET}}",
-      "Condition": {"StringLike": {"s3:prefix": ["parsed-output/*"]}}
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "parsed-output/*"
+          ]
+        }
+      }
     },
     {
       "Sid": "TestInvokeFunction",
       "Effect": "Allow",
-      "Action": ["lambda:InvokeFunction", "lambda:GetFunctionConfiguration"],
+      "Action": [
+        "lambda:InvokeFunction",
+        "lambda:GetFunctionConfiguration"
+      ],
       "Resource": "arn:aws:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:email-parser"
     },
     {
@@ -105,7 +52,10 @@
     {
       "Sid": "CliSignInWithConsoleCredentials",
       "Effect": "Allow",
-      "Action": ["signin:AuthorizeOAuth2Access", "signin:CreateOAuth2Token"],
+      "Action": [
+        "signin:AuthorizeOAuth2Access",
+        "signin:CreateOAuth2Token"
+      ],
       "Resource": "*"
     },
     {

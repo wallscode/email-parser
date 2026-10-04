@@ -1,0 +1,72 @@
+name: Deploy
+
+# Every push to main deploys the Lambda function. Infrastructure changes beyond the
+# function are refused by IAM and the stack policy and need an admin running
+# `deploy.sh --initial` (see CLAUDE.md).
+on:
+  push:
+    branches: [main]
+
+# OIDC token to authenticate with AWS (no stored keys); contents:read for checkout.
+permissions:
+  id-token: write
+  contents: read
+
+# Never run two deploys at once; queue them instead.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    # The AWS role trusts only this environment, and only main may use it
+    # (repo settings), so no other branch can deploy even by editing this file.
+    environment: production
+
+    steps:
+      # Actions are pinned to full commit SHAs so a moved tag can't change the
+      # code that runs with AWS credentials. Bump deliberately.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Install AWS CDK CLI
+        run: npm install -g aws-cdk@2.1112.0
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/email-parser-github-deploy
+          role-session-name: email-parser-github-deploy
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # deploy.sh reads its configuration from the environment, the same values
+      # as a local .env. All account-specific values are secrets, so GitHub masks
+      # them in this public repo's logs.
+      - name: Deploy
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+          PARSER_EMAIL_USER: ${{ secrets.PARSER_EMAIL_USER }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          HOSTED_ZONE_ID: ${{ secrets.HOSTED_ZONE_ID }}
+          SSM_API_KEY_PATH: ${{ secrets.SSM_API_KEY_PATH }}
+          SSM_PHONE_PATH: ${{ secrets.SSM_PHONE_PATH }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION: '1'
+        run: bash deploy.sh

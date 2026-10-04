@@ -58,7 +58,12 @@ echo "==> Building Lambda package..."
 LAMBDA_BUILD_DIR="$REPO_ROOT/dist/lambda"
 rm -rf "$LAMBDA_BUILD_DIR"
 mkdir -p "$LAMBDA_BUILD_DIR"
-pip install -q -r "$REPO_ROOT/lambda/requirements.txt" -t "$LAMBDA_BUILD_DIR"
+# Always build for Lambda's platform (Linux x86_64, Python 3.12), not the machine running
+# this script — otherwise compiled packages (pydantic_core, jiter, lxml) get macOS or
+# wrong-Python binaries and the function fails at import.
+pip install -q -r "$REPO_ROOT/lambda/requirements.txt" -t "$LAMBDA_BUILD_DIR" \
+  --platform manylinux2014_x86_64 --implementation cp --python-version 3.12 \
+  --only-binary=:all:
 cp "$REPO_ROOT/lambda/"*.py "$LAMBDA_BUILD_DIR/"
 echo "    Lambda package built at dist/lambda/"
 
