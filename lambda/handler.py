@@ -275,19 +275,38 @@ def handler(event, context):
         # Call Claude
         api_key = get_ssm_parameter(SSM_API_KEY_PATH, ssm_client)
         client = anthropic.Anthropic(api_key=api_key)
-        claude_response = client.messages.create(
+        claude_response = client.beta.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=4096,
+            # Room for thinking plus the reply.
+            max_tokens=16000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content_blocks}],
+            # Summarizing and extracting from documents doesn't need deep reasoning.
+            output_config={"effort": "low"},
+            # If a safety classifier declines, retry server-side on another model.
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
         )
-        raw_text = claude_response.content[0].text
 
-        # Parse JSON from Claude response
-        try:
-            result = json.loads(raw_text)
-        except json.JSONDecodeError:
-            result = {"summary": raw_text, "documents": [], "action_items": [], "urgent": False}
+        if claude_response.stop_reason == "refusal":
+            # Don't raise: Lambda would retry, and the retry would be declined too.
+            details = claude_response.stop_details
+            category = details.category if details else None
+            logger.warning("Claude declined to analyze email %s (category: %s)", message_id, category)
+            result = {
+                "summary": f"Claude declined to analyze this email (category: {category}).",
+                "documents": [], "action_items": [], "urgent": False,
+            }
+        else:
+            # The response can begin with thinking blocks; the answer is in the text blocks.
+            raw_text = "".join(b.text for b in claude_response.content if b.type == "text").strip()
+            # Tolerate the JSON being wrapped in a Markdown code fence.
+            if raw_text.startswith("```"):
+                raw_text = raw_text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+            try:
+                result = json.loads(raw_text)
+            except json.JSONDecodeError:
+                result = {"summary": raw_text, "documents": [], "action_items": [], "urgent": False}
 
         result["_meta"] = {
             "message_id": message_id,
