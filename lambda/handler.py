@@ -196,6 +196,28 @@ def build_email_body(result: dict, s3_key: str) -> str:
     """
 
 
+def send_failure_notice(subject, message_id, key: str, exc: Exception, ses_client) -> None:
+    """Tell NOTIFY_EMAIL that an email couldn't be processed. Never raises."""
+    error = f"{type(exc).__name__}: {exc}"[:1000]
+    body_html = f"""
+    <html><body>
+    <h2 style="color:#b00020;">Email Parser couldn't process an email</h2>
+    <p><b>Subject:</b> {html.escape(str(subject))}<br>
+    <b>Message-ID:</b> {html.escape(str(message_id))}<br>
+    <b>Stored as:</b> {html.escape(key)}</p>
+    <p><b>Error:</b> {html.escape(error)}</p>
+    <p style="color:grey;font-size:small;">Full details are in CloudWatch Logs
+    (log group /aws/lambda/email-parser). The original email stays in S3 for 30 days,
+    so it can be reprocessed once the problem is fixed.</p>
+    </body></html>
+    """
+    try:
+        send_email(f"[Email Parser] Failed: {str(subject)[:150]}", body_html, ses_client)
+        logger.info("Failure notice sent to %s", NOTIFY_EMAIL)
+    except Exception:
+        logger.exception("Could not send failure notice for email %s", message_id)
+
+
 # ── Sender allowlist ───────────────────────────────────────────────────────
 
 
@@ -234,26 +256,8 @@ def sender_is_allowed(msg) -> bool:
 # ── Lambda entry point ─────────────────────────────────────────────────────
 
 
-def handler(event, context):
-    s3_client = boto3.client("s3")
-    ses_client = boto3.client("ses")
-    ssm_client = boto3.client("ssm")
-
-    record = event["Records"][0]["s3"]
-    bucket = record["bucket"]["name"]
-    key = record["object"]["key"]
-    logger.info("Processing s3://%s/%s", bucket, key)
-
-    # Fetch and parse raw email
-    response = s3_client.get_object(Bucket=bucket, Key=key)
-    raw_email = response["Body"].read()
-    msg = BytesParser(policy=email_policy.default).parsebytes(raw_email)
-
-    if not sender_is_allowed(msg):
-        return
-
-    message_id = msg.get("Message-ID", key.split("/")[-1])
-    subject = msg.get("subject", "(no subject)")
+def process_email(msg, message_id, subject, s3_client, ses_client, ssm_client) -> None:
+    """Analyze an allowlisted email with Claude, save the result, and email a summary."""
     sender = msg.get("from", "unknown")
 
     # Build email body text block
@@ -271,59 +275,85 @@ def handler(event, context):
     ]
     content_blocks.extend(extract_attachments(msg))
 
-    try:
-        # Call Claude
-        api_key = get_ssm_parameter(SSM_API_KEY_PATH, ssm_client)
-        client = anthropic.Anthropic(api_key=api_key)
-        claude_response = client.beta.messages.create(
-            model=CLAUDE_MODEL,
-            # Room for thinking plus the reply.
-            max_tokens=16000,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": content_blocks}],
-            # Summarizing and extracting from documents doesn't need deep reasoning.
-            output_config={"effort": "low"},
-            # If a safety classifier declines, retry server-side on another model.
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-        )
+    # Call Claude
+    api_key = get_ssm_parameter(SSM_API_KEY_PATH, ssm_client)
+    client = anthropic.Anthropic(api_key=api_key)
+    claude_response = client.beta.messages.create(
+        model=CLAUDE_MODEL,
+        # Room for thinking plus the reply.
+        max_tokens=16000,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": content_blocks}],
+        # Summarizing and extracting from documents doesn't need deep reasoning.
+        output_config={"effort": "low"},
+        # If a safety classifier declines, retry server-side on another model.
+        betas=["server-side-fallback-2026-07-01"],
+        fallbacks="default",
+    )
 
-        if claude_response.stop_reason == "refusal":
-            # Don't raise: Lambda would retry, and the retry would be declined too.
-            details = claude_response.stop_details
-            category = details.category if details else None
-            logger.warning("Claude declined to analyze email %s (category: %s)", message_id, category)
-            result = {
-                "summary": f"Claude declined to analyze this email (category: {category}).",
-                "documents": [], "action_items": [], "urgent": False,
-            }
-        else:
-            # The response can begin with thinking blocks; the answer is in the text blocks.
-            raw_text = "".join(b.text for b in claude_response.content if b.type == "text").strip()
-            # Tolerate the JSON being wrapped in a Markdown code fence.
-            if raw_text.startswith("```"):
-                raw_text = raw_text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-            try:
-                result = json.loads(raw_text)
-            except json.JSONDecodeError:
-                result = {"summary": raw_text, "documents": [], "action_items": [], "urgent": False}
-
-        result["_meta"] = {
-            "message_id": message_id,
-            "subject": subject,
-            "sender": sender,
-            "processed_at": datetime.now(timezone.utc).isoformat(),
+    if claude_response.stop_reason == "refusal":
+        # Don't raise: Lambda would retry, and the retry would be declined too.
+        details = claude_response.stop_details
+        category = details.category if details else None
+        logger.warning("Claude declined to analyze email %s (category: %s)", message_id, category)
+        result = {
+            "summary": f"Claude declined to analyze this email (category: {category}).",
+            "documents": [], "action_items": [], "urgent": False,
         }
+    else:
+        # The response can begin with thinking blocks; the answer is in the text blocks.
+        raw_text = "".join(b.text for b in claude_response.content if b.type == "text").strip()
+        # Tolerate the JSON being wrapped in a Markdown code fence.
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        try:
+            result = json.loads(raw_text)
+        except json.JSONDecodeError:
+            result = {"summary": raw_text, "documents": [], "action_items": [], "urgent": False}
 
-        # Save to S3
-        s3_key = save_to_s3(result, message_id, s3_client)
-        logger.info("Saved analysis to %s", s3_key)
+    result["_meta"] = {
+        "message_id": message_id,
+        "subject": subject,
+        "sender": sender,
+        "processed_at": datetime.now(timezone.utc).isoformat(),
+    }
 
-        # Send email summary
-        email_subject = f"[Email Parser] {subject}"
-        send_email(email_subject, build_email_body(result, s3_key), ses_client)
-        logger.info("Summary email sent to %s", NOTIFY_EMAIL)
+    # Save to S3
+    s3_key = save_to_s3(result, message_id, s3_client)
+    logger.info("Saved analysis to %s", s3_key)
 
-    except Exception:
+    # Send email summary
+    email_subject = f"[Email Parser] {subject}"
+    send_email(email_subject, build_email_body(result, s3_key), ses_client)
+    logger.info("Summary email sent to %s", NOTIFY_EMAIL)
+
+
+def handler(event, context):
+    s3_client = boto3.client("s3")
+    ses_client = boto3.client("ses")
+    ssm_client = boto3.client("ssm")
+
+    record = event["Records"][0]["s3"]
+    bucket = record["bucket"]["name"]
+    key = record["object"]["key"]
+    logger.info("Processing s3://%s/%s", bucket, key)
+
+    # Used in the failure notice if the email itself can't be read.
+    message_id, subject = key.split("/")[-1], "(email could not be read)"
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        raw_email = response["Body"].read()
+        msg = BytesParser(policy=email_policy.default).parsebytes(raw_email)
+
+        # Dropped mail gets no notice: anyone can email the parser address.
+        if not sender_is_allowed(msg):
+            return
+
+        message_id = msg.get("Message-ID", message_id)
+        subject = msg.get("subject", "(no subject)")
+        process_email(msg, message_id, subject, s3_client, ses_client, ssm_client)
+    except Exception as exc:
+        # Notify instead of re-raising: a Lambda retry would repeat the paid Claude call
+        # and send another notice, and the SDK already retries transient API errors.
         logger.exception("Failed to process email %s", message_id)
-        raise
+        send_failure_notice(subject, message_id, key, exc, ses_client)

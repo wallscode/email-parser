@@ -18,6 +18,7 @@ Outlook → SES (parser@yourdomain.com) → S3 (raw-emails/) → Lambda
         ├─ Calls Claude API for document analysis
         ├─ Saves JSON to S3 (parsed-output/YYYY-MM-DD/MESSAGE_ID.json)
         └─ Sends email summary via SES (to NOTIFY_EMAIL only)
+           — or, if processing fails, a one-time failure notice (no Lambda retry)
 ```
 
 **AWS services:** SES, S3, Lambda, Route 53, SSM Parameter Store, CloudWatch
