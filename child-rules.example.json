@@ -1,0 +1,21 @@
+{
+  "children": [
+    {
+      "name": "Child One",
+      "graduation_year": 2036,
+      "activities": ["soccer", "Cub Scouts"],
+      "excluded_activities": ["band", "football", "student council"],
+      "notes": "Ms. Example's class at Example Elementary",
+      "domains": ["elementary.example.org", "soccer-league.example.com"],
+      "senders": ["coach@example.com"]
+    },
+    {
+      "name": "Child Two",
+      "graduation_year": 2030,
+      "activities": ["band", "robotics"],
+      "excluded_activities": ["soccer", "Cub Scouts"],
+      "domains": ["high.example.org", "district.example.org"],
+      "senders": []
+    }
+  ]
+}

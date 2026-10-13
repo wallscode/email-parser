@@ -71,7 +71,11 @@ class EmailParserStack(cdk.Stack):
         lambda_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["s3:GetObject"],
-                resources=[bucket.arn_for_objects("raw-emails/*")],
+                resources=[
+                    bucket.arn_for_objects("raw-emails/*"),
+                    # Per-child filtering rules, uploaded by scripts/upload-child-rules.sh.
+                    bucket.arn_for_objects("config/child-rules.json"),
+                ],
             )
         )
         lambda_role.add_to_policy(

@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Per-child rules (names, schools, domains) — uploaded to S3, never committed
+child-rules.json
+
 # CDK
 cdk.out/
 infrastructure/cdk.out/

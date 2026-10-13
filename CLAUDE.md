@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Serverless AWS pipeline that receives forwarded emails, extracts attachments, analyzes documents using Claude API, saves structured JSON results to S3, and emails the user a summary. Only mail from allowlisted senders (`ALLOWED_SENDERS`) that passes SES's DMARC check is processed; everything else is dropped before any Claude call.
 
+Per-child rules (`config/child-rules.json` in S3) match the *original* sender of a forwarded email — read from an attached email ("Forward as Attachment") or the forwarded `From:` line — by domain (subdomains included) or exact address. A match adds that child's grade and activities to the prompt. The grade comes from `graduation_year` and advances each August (e.g. 2030 → "9th grade (freshman, Class of 2030)" in 2026-27); a hand-set `grade` overrides it. The match lets Claude drop details that don't apply; no match gives a normal summary.
+
 The full implementation plan is in `email-parser-project-plan-v2.docx`.
 
 ## Architecture
@@ -15,6 +17,7 @@ Outlook → SES (parser@yourdomain.com) → S3 (raw-emails/) → Lambda
     Lambda:
         ├─ Extracts attachments (PDF, DOCX, XLSX, TXT, CSV, PNG, JPG)
         ├─ Converts to text (or base64 for images)
+        ├─ Matches the original sender to child rules (config/child-rules.json)
         ├─ Calls Claude API for document analysis
         ├─ Saves JSON to S3 (parsed-output/YYYY-MM-DD/MESSAGE_ID.json)
         └─ Sends email summary via SES (to NOTIFY_EMAIL only)
@@ -30,8 +33,10 @@ Outlook → SES (parser@yourdomain.com) → S3 (raw-emails/) → Lambda
 ```
 email-parser/
 ├── config.py                          # Reads all settings from env vars (placeholders only)
+├── child-rules.example.json           # Template for child-rules.json (gitignored; uploaded to S3)
 ├── deploy.sh                          # Routine deploy (deployer) or --initial (admin)
 ├── scripts/setup-iam.sh               # Admin-only: creates deployer user + CloudFormation role
+├── scripts/upload-child-rules.sh      # Validates and uploads child-rules.json (deployer)
 ├── .github/workflows/deploy.yml       # CI: deploys on every push to main (OIDC, no stored keys)
 ├── iam/                               # Policy templates ({{PLACEHOLDERS}} filled at run time)
 │   ├── deploy-policy.json             # Shared deploy permissions (deployer user + GitHub role)
@@ -56,6 +61,7 @@ All routine AWS work uses the `email-parser-deployer` IAM user, signed in with `
 - deploy `EmailParserStack` through change sets that use the `email-parser-cloudformation` role. That role can only update the `email-parser` function's code and configuration.
 - upload CDK assets under the `email-parser/` prefix
 - run tests: put to `raw-emails/`, read `parsed-output/`, invoke the function, read its logs
+- upload and read the child rules at `config/child-rules.json`
 
 Every push to `main` deploys the same way through GitHub Actions. The workflow assumes `email-parser-github-deploy` over OIDC, so no AWS keys are stored in GitHub. That role has the same deploy permissions as the deployer user, minus testing. It trusts only this repo's `production` environment, which only `main` may use. A "Protect main" ruleset blocks force-pushes and deletion of `main`.
 
@@ -68,6 +74,9 @@ If a deploy fails with AccessDenied, add the narrowest possible action to the ma
 ```bash
 # Routine deploy: push to main (GitHub Actions), or locally as email-parser-deployer
 source .env && bash deploy.sh
+
+# Update child rules (no deploy needed): edit child-rules.json, then
+source .env && bash scripts/upload-child-rules.sh
 
 # Admin only: create/refresh IAM, then full infrastructure deploy + one-time setup
 source .env && bash scripts/setup-iam.sh
@@ -88,7 +97,7 @@ The following must never appear in any committed file:
 
 All deployment-specific values are supplied at runtime via environment variables — never stored in `config.py` or any committed file. `config.py` must only contain placeholder/example values (e.g. `os.environ.get('DOMAIN', 'example.com')`).
 
-The Claude API key is stored as a SecureString in AWS SSM Parameter Store and read by the Lambda at run time. Email addresses (`NOTIFY_EMAIL`, `ALLOWED_SENDERS`) come from `.env` locally and GitHub secrets in CI.
+The Claude API key is stored as a SecureString in AWS SSM Parameter Store and read by the Lambda at run time. Email addresses (`NOTIFY_EMAIL`, `ALLOWED_SENDERS`) come from `.env` locally and GitHub secrets in CI. Children's names, schools and domains live only in the gitignored `child-rules.json` and in S3 — never in a committed file.
 
 For CI/CD, all values are stored as GitHub Actions secrets and passed to the CDK deploy step — no values are hardcoded in workflow files.
 

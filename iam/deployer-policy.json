@@ -27,6 +27,15 @@
       }
     },
     {
+      "Sid": "ManageChildRules",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::{{BUCKET}}/config/child-rules.json"
+    },
+    {
       "Sid": "TestInvokeFunction",
       "Effect": "Allow",
       "Action": [
