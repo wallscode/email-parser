@@ -1,0 +1,20 @@
+version: 2
+
+# The CDK library and CLI are updated together in one weekly PR: a newer aws-cdk-lib can
+# need a newer CLI. The "Infrastructure check" workflow says on the PR whether it can ship
+# with a routine deploy or needs an admin deploy first.
+multi-ecosystem-groups:
+  cdk:
+    schedule:
+      interval: "weekly"
+
+updates:
+  - package-ecosystem: "pip"
+    directory: "/infrastructure"
+    patterns: ["aws-cdk-lib", "constructs"]
+    multi-ecosystem-group: "cdk"
+
+  - package-ecosystem: "npm"
+    directory: "/infrastructure"
+    patterns: ["aws-cdk"]
+    multi-ecosystem-group: "cdk"

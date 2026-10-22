@@ -29,3 +29,6 @@ venv/
 
 # CDK lookup cache (contains account ID and domain)
 infrastructure/cdk.context.json
+
+# CDK CLI (pinned in infrastructure/package.json)
+node_modules/

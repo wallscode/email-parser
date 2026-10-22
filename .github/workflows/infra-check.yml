@@ -1,0 +1,39 @@
+name: Infrastructure check
+
+# Tells, before merging, whether a pull request can ship with the routine deploy or needs
+# an admin to run `deploy.sh --initial` first (see scripts/check-infra-change.sh).
+# Runs with no AWS credentials and no secrets, so it is safe for Dependabot and fork PRs.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Routine deploy check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          # The base branch is needed to compare against.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Compare with the base branch
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: bash scripts/check-infra-change.sh "$BASE_REF"

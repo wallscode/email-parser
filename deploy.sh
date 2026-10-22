@@ -39,6 +39,15 @@ for var in "${required_vars[@]}"; do
 done
 echo "    All required variables present."
 
+# Use the CDK CLI pinned in infrastructure/package.json (cd infrastructure && npm ci),
+# so it always matches aws-cdk-lib. A global `cdk` can be too old for the library.
+if [[ -x "$REPO_ROOT/infrastructure/node_modules/.bin/cdk" ]]; then
+  PATH="$REPO_ROOT/infrastructure/node_modules/.bin:$PATH"
+else
+  echo "    Note: pinned CDK CLI not installed; using $(command -v cdk || echo 'no cdk found')."
+  echo "    Install it with: (cd infrastructure && npm ci)"
+fi
+
 SSM_API_KEY_PATH="${SSM_API_KEY_PATH:-/email-parser/claude-api-key}"
 DEPLOYER_CFN_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/email-parser-cloudformation"
 ADMIN_CFN_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/cdk-hnb659fds-cfn-exec-role-${AWS_ACCOUNT_ID}-${AWS_REGION}"

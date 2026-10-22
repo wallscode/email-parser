@@ -37,7 +37,10 @@ email-parser/
 ├── deploy.sh                          # Routine deploy (deployer) or --initial (admin)
 ├── scripts/setup-iam.sh               # Admin-only: creates deployer user + CloudFormation role
 ├── scripts/upload-child-rules.sh      # Validates and uploads child-rules.json (deployer)
+├── scripts/check-infra-change.sh      # Says whether a change needs an admin deploy (no AWS access)
 ├── .github/workflows/deploy.yml       # CI: deploys on every push to main (OIDC, no stored keys)
+├── .github/workflows/infra-check.yml  # CI: runs check-infra-change.sh on every PR (no secrets)
+├── .github/dependabot.yml             # Weekly grouped PR for aws-cdk-lib, constructs and the CDK CLI
 ├── iam/                               # Policy templates ({{PLACEHOLDERS}} filled at run time)
 │   ├── deploy-policy.json             # Shared deploy permissions (deployer user + GitHub role)
 │   ├── deployer-policy.json           # email-parser-deployer extras: testing, own password/MFA
@@ -49,6 +52,7 @@ email-parser/
 ├── infrastructure/
 │   ├── app.py                         # CDK app entry point (CliCredentialsStackSynthesizer)
 │   ├── requirements.txt               # Pinned CDK deps
+│   ├── package.json                   # Pins the CDK CLI (cd infrastructure && npm ci)
 │   └── stacks/email_parser_stack.py   # All AWS resources defined here
 └── lambda/
     ├── handler.py                      # Core Lambda logic
@@ -69,11 +73,16 @@ Everything else is admin-only and done with `deploy.sh --initial`: S3 bucket set
 
 If a deploy fails with AccessDenied, add the narrowest possible action to the matching file in `iam/`. Applying it needs an admin to re-run `scripts/setup-iam.sh`.
 
+Every pull request runs the "Infrastructure check" (`scripts/check-infra-change.sh`). It synthesizes the stack at the base branch and at the PR with placeholder settings, without AWS access or secrets, and fails if anything other than the function would change. A failing PR, such as a Dependabot CDK update that changes CDK's helper resources, needs an admin to run `deploy.sh --initial` from the PR branch before merging. The check isn't a required status check, because it still fails after that admin deploy.
+
 ## Key Commands
 
 ```bash
 # Routine deploy: push to main (GitHub Actions), or locally as email-parser-deployer
 source .env && bash deploy.sh
+
+# Does this branch need an admin deploy? (no AWS access needed)
+bash scripts/check-infra-change.sh origin/main
 
 # Update child rules (no deploy needed): edit child-rules.json, then
 source .env && bash scripts/upload-child-rules.sh
@@ -140,7 +149,7 @@ Test fixtures (`test-event.json`, `test.eml`) must use placeholder values only �
 ## Prerequisites
 
 - AWS CLI configured with admin access
-- AWS CDK installed: `npm install -g aws-cdk`
+- AWS CDK CLI installed from the pinned version: `cd infrastructure && npm ci` (deploy.sh uses it)
 - Python 3.12+
 - Domain hosted in Route 53 (no existing MX record)
 - Claude API key from console.anthropic.com
