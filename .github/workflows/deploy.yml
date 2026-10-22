@@ -18,8 +18,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Runs without the production environment, so it gets no AWS role or secrets.
+  test:
+    name: Tests
+    uses: ./.github/workflows/tests.yml
+    permissions:
+      contents: read
+
   deploy:
     name: Deploy
+    needs: test
     runs-on: ubuntu-latest
     # The AWS role trusts only this environment, and only main may use it
     # (repo settings), so no other branch can deploy even by editing this file.
