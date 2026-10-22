@@ -109,7 +109,7 @@ class EmailParserStack(cdk.Stack):
             self,
             "EmailParserFunction",
             function_name="email-parser",
-            runtime=lambda_.Runtime.PYTHON_3_12,
+            runtime=lambda_.Runtime.PYTHON_3_14,
             handler="handler.handler",
             role=lambda_role,
             timeout=Duration.seconds(300),
