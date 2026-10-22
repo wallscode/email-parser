@@ -25,7 +25,7 @@ Outlook → SES (parser@yourdomain.com) → S3 (raw-emails/) → Lambda
 ```
 
 **AWS services:** SES, S3, Lambda, Route 53, SSM Parameter Store, CloudWatch
-**Python runtime:** 3.12
+**Python runtime:** 3.14
 **Infrastructure:** AWS CDK (Python)
 
 ## Project Structure
