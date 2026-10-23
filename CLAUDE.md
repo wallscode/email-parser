@@ -40,6 +40,7 @@ email-parser/
 ├── scripts/check-infra-change.sh      # Says whether a change needs an admin deploy (no AWS access)
 ├── .github/workflows/deploy.yml       # CI: deploys on every push to main (OIDC, no stored keys)
 ├── .github/workflows/infra-check.yml  # CI: runs check-infra-change.sh on every PR (no secrets)
+├── .github/workflows/tests.yml        # CI: unit tests on every PR and before every deploy (no secrets)
 ├── .github/dependabot.yml             # Weekly grouped PR for aws-cdk-lib, constructs and the CDK CLI
 ├── iam/                               # Policy templates ({{PLACEHOLDERS}} filled at run time)
 │   ├── deploy-policy.json             # Shared deploy permissions (deployer user + GitHub role)
@@ -54,9 +55,14 @@ email-parser/
 │   ├── requirements.txt               # Pinned CDK deps
 │   ├── package.json                   # Pins the CDK CLI (cd infrastructure && npm ci)
 │   └── stacks/email_parser_stack.py   # All AWS resources defined here
-└── lambda/
-    ├── handler.py                      # Core Lambda logic
-    └── requirements.txt               # Lambda deps (anthropic, pypdf, python-docx, openpyxl)
+├── lambda/
+│   ├── handler.py                      # Core Lambda logic
+│   └── requirements.txt               # Lambda deps (anthropic, pypdf, python-docx, openpyxl)
+└── tests/
+    ├── conftest.py                    # Placeholder env vars; puts lambda/ on the import path
+    ├── test_handler.py                # Unit tests for handler.py's pure logic
+    ├── requirements.txt               # Lambda deps + pytest
+    └── test.eml, test-event.json      # Fixtures for the end-to-end test
 ```
 
 ## IAM Model (least privilege)
@@ -134,6 +140,15 @@ SSM_API_KEY_PATH = os.environ.get('SSM_API_KEY_PATH', '/email-parser/claude-api-
 Set these in your local shell before deploying (or via GitHub Actions secrets for CI). Never put real values in the file itself.
 
 ## Testing
+
+Unit tests cover the logic that needs no AWS: the sender allowlist and DMARC check, finding the original sender of a forward, child-rule matching and validation, grades, and the summary email. They run on every PR and before every deploy (`.github/workflows/tests.yml`).
+
+```bash
+pip install -r tests/requirements.txt
+python -m pytest tests
+```
+
+Tests use made-up names and reserved domains (`example.com`, `.example`, `.test`) only. Never copy a real email into a test; copy its structure and replace every name, address and domain.
 
 End-to-end test by uploading a `.eml` file to the S3 `raw-emails/` prefix and invoking Lambda with a synthetic S3 event. Check `parsed-output/` for the result JSON and CloudWatch logs at `/aws/lambda/email-parser`.
 
