@@ -13,7 +13,6 @@ from email.utils import parseaddr
 import anthropic
 import boto3
 import openpyxl
-import pypdf
 from docx import Document
 
 logger = logging.getLogger()
@@ -58,9 +57,18 @@ Return your response as a JSON object with these top-level keys:
 # ── Attachment extraction helpers (no AWS calls) ───────────────────────────
 
 
-def extract_pdf(data: bytes) -> str:
-    reader = pypdf.PdfReader(io.BytesIO(data))
-    return "\n".join(page.extract_text() or "" for page in reader.pages)
+def pdf_to_content_block(data: bytes, filename: str) -> dict:
+    # Sent whole rather than as extracted text: Claude reads each page's text and image,
+    # so scanned forms and flyers (which have no text layer) are read too.
+    return {
+        "type": "document",
+        "source": {
+            "type": "base64",
+            "media_type": "application/pdf",
+            "data": base64.standard_b64encode(data).decode("utf-8"),
+        },
+        "title": filename,
+    }
 
 
 def extract_docx(data: bytes) -> str:
@@ -112,8 +120,7 @@ def extract_attachments(msg) -> list:
 
         try:
             if content_type == "application/pdf":
-                text = extract_pdf(data)
-                blocks.append({"type": "text", "text": f"[Attachment: {filename}]\n{text}"})
+                blocks.append(pdf_to_content_block(data, filename))
 
             elif content_type in (
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

@@ -16,7 +16,7 @@ The full implementation plan is in `email-parser-project-plan-v2.docx`.
 Outlook → SES (parser@yourdomain.com) → S3 (raw-emails/) → Lambda
     Lambda:
         ├─ Extracts attachments (PDF, DOCX, XLSX, TXT, CSV, PNG, JPG)
-        ├─ Converts to text (or base64 for images)
+        ├─ Converts to text (PDFs and images are sent to Claude as-is)
         ├─ Matches the original sender to child rules (config/child-rules.json)
         ├─ Calls Claude API for document analysis
         ├─ Saves JSON to S3 (parsed-output/YYYY-MM-DD/MESSAGE_ID.json)
@@ -57,7 +57,7 @@ email-parser/
 │   └── stacks/email_parser_stack.py   # All AWS resources defined here
 ├── lambda/
 │   ├── handler.py                      # Core Lambda logic
-│   └── requirements.txt               # Lambda deps (anthropic, pypdf, python-docx, openpyxl)
+│   └── requirements.txt               # Lambda deps (anthropic, python-docx, openpyxl)
 └── tests/
     ├── conftest.py                    # Placeholder env vars; puts lambda/ on the import path
     ├── test_handler.py                # Unit tests for handler.py's pure logic

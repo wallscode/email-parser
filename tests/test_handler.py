@@ -3,6 +3,7 @@
 All names, addresses and domains are made up; example.com/.org/.test are reserved for this.
 """
 
+import base64
 import io
 import json
 from datetime import date
@@ -282,3 +283,18 @@ def test_email_body_escapes_claude_output():
     body = handler.build_email_body(result, "parsed-output/x.json", "note <b>")
     assert "<a href" not in body and "<script>" not in body and "note <b>" not in body
     assert "&lt;a href=" in body and "Urgent" in body
+
+
+# ── Attachments ────────────────────────────────────────────────────────────
+
+
+def test_pdf_attachment_is_sent_whole():
+    # A scanned PDF has no text layer, so it goes to Claude as a document, not extracted text.
+    pdf = b"%PDF-1.4 scanned page"
+    msg = make_email()
+    msg.add_attachment(pdf, maintype="application", subtype="pdf", filename="0001_scan.pdf")
+    [block] = handler.extract_attachments(msg)
+    assert block["type"] == "document"
+    assert block["title"] == "0001_scan.pdf"
+    assert block["source"]["media_type"] == "application/pdf"
+    assert base64.standard_b64decode(block["source"]["data"]) == pdf
