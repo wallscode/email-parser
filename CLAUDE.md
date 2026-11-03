@@ -41,7 +41,7 @@ email-parser/
 ├── .github/workflows/deploy.yml       # CI: deploys on every push to main (OIDC, no stored keys)
 ├── .github/workflows/infra-check.yml  # CI: runs check-infra-change.sh on every PR (no secrets)
 ├── .github/workflows/tests.yml        # CI: unit tests on every PR and before every deploy (no secrets)
-├── .github/dependabot.yml             # Weekly grouped PR for aws-cdk-lib, constructs and the CDK CLI
+├── .github/dependabot.yml             # Weekly grouped PRs: CDK (lib, constructs, CLI), Python deps, Actions
 ├── iam/                               # Policy templates ({{PLACEHOLDERS}} filled at run time)
 │   ├── deploy-policy.json             # Shared deploy permissions (deployer user + GitHub role)
 │   ├── deployer-policy.json           # email-parser-deployer extras: testing, own password/MFA
