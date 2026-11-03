@@ -18,3 +18,22 @@ updates:
     directory: "/infrastructure"
     patterns: ["aws-cdk"]
     multi-ecosystem-group: "cdk"
+
+  # Lambda and test dependencies: one weekly PR. These only change the function's code,
+  # so they ship with a routine deploy.
+  - package-ecosystem: "pip"
+    directories: ["/lambda", "/tests"]
+    schedule:
+      interval: "weekly"
+    groups:
+      python:
+        patterns: ["*"]
+
+  # Actions are pinned to commit SHAs; Dependabot updates the SHA and the version comment.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
