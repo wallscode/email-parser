@@ -3,6 +3,6 @@
   "private": true,
   "description": "Pins the AWS CDK CLI so Dependabot updates it with aws-cdk-lib",
   "devDependencies": {
-    "aws-cdk": "2.1147.0"
+    "aws-cdk": "2.1148.0"
   }
 }
