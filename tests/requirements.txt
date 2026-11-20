@@ -10,9 +10,9 @@ annotated-types==0.8.0 \
     # via
     #   -c ../lambda/requirements.txt
     #   pydantic
-anthropic==2.8.0 \
-    --hash=sha256:76ad332e2d500fc54d0112cf100544ad1a7605e71e092b98d9eb664d2b66e283 \
-    --hash=sha256:d34e389ba0544cd64e033eb7475f46cc1ac6f2a388cdcd472b33ad4ac29ef40c
+anthropic==2.9.0 \
+    --hash=sha256:0a3379add94953db2dc736839bbafb0c624f6bec69caf13e44353d906c253981 \
+    --hash=sha256:410281f4b9fa6422ccc465e5e531a00d69c6f589c743134e77c23fefc3e5cb4f
     # via
     #   -c ../lambda/requirements.txt
     #   -r ../lambda/requirements.in
