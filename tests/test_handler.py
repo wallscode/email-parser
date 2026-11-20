@@ -79,6 +79,22 @@ def test_authentication_results_not_from_ses_is_dropped():
     assert not handler.sender_is_allowed(make_email(auth=(forged,)))
 
 
+@pytest.mark.parametrize("authserv_id", ["amazonses.com.attacker.test", "amazonses.computer.test"])
+def test_authserv_id_that_only_starts_with_amazonses_is_dropped(authserv_id):
+    forged = SES_PASS.replace("amazonses.com;", f"{authserv_id};")
+    assert not handler.sender_is_allowed(make_email(auth=(forged,)))
+
+
+@pytest.mark.parametrize("dmarc_domain", ["example.com.attacker.test", "example.com-attacker.test"])
+def test_dmarc_pass_for_a_domain_extending_the_senders_is_dropped(dmarc_domain):
+    other = SES_PASS.replace("header.from=example.com", f"header.from={dmarc_domain}")
+    assert not handler.sender_is_allowed(make_email(auth=(other,)))
+
+
+def test_dmarc_domain_at_end_of_header_is_allowed():
+    assert handler.sender_is_allowed(make_email(auth=(SES_PASS.rstrip(";"),)))
+
+
 def test_virus_scan_failure_is_dropped():
     msg = make_email(headers={"X-SES-Virus-Verdict": "FAIL"})
     assert not handler.sender_is_allowed(msg)

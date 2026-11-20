@@ -277,9 +277,15 @@ def sender_is_allowed(msg) -> bool:
     results = msg.get_all("Authentication-Results") or []
     ses_result = str(results[0]) if results else ""
     domain = re.escape(address.rsplit("@", 1)[-1])
+    # The authserv-id (text before the first ";") must be exactly SES's, and the DMARC
+    # domain must end where the sender's domain ends: "\b" alone would also accept
+    # header.from=example.com.attacker.test for a sender at example.com.
+    authserv_id = ses_result.split(";", 1)[0].strip().lower()
     if not (
-        ses_result.strip().lower().startswith("amazonses.com")
-        and re.search(rf"\bdmarc=pass\b[^;]*\bheader\.from={domain}\b", ses_result, re.IGNORECASE)
+        authserv_id == "amazonses.com"
+        and re.search(
+            rf"\bdmarc=pass\b[^;]*\bheader\.from={domain}(?![\w.-])", ses_result, re.IGNORECASE
+        )
     ):
         logger.warning("Dropping email from %s: SES authentication did not pass", address)
         return False
