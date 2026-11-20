@@ -52,16 +52,19 @@ email-parser/
 │   └── stack-policy-admin-update.json # Temporarily applied during admin deploys
 ├── infrastructure/
 │   ├── app.py                         # CDK app entry point (CliCredentialsStackSynthesizer)
-│   ├── requirements.txt               # Pinned CDK deps
+│   ├── requirements.in                # CDK deps (edit this)
+│   ├── requirements.txt               # Lockfile with hashes, compiled from .in by pip-compile
 │   ├── package.json                   # Pins the CDK CLI (cd infrastructure && npm ci)
 │   └── stacks/email_parser_stack.py   # All AWS resources defined here
 ├── lambda/
 │   ├── handler.py                      # Core Lambda logic
-│   └── requirements.txt               # Lambda deps (anthropic, python-docx, openpyxl)
+│   ├── requirements.in                # Lambda deps (anthropic, python-docx, openpyxl) — edit this
+│   └── requirements.txt               # Lockfile with hashes, compiled from .in by pip-compile
 └── tests/
     ├── conftest.py                    # Placeholder env vars; puts lambda/ on the import path
     ├── test_handler.py                # Unit tests for handler.py's pure logic
-    ├── requirements.txt               # Lambda deps + pytest
+    ├── requirements.in                # Lambda deps (constrained to the Lambda lockfile) + pytest
+    ├── requirements.txt               # Lockfile with hashes, compiled from .in by pip-compile
     └── test.eml, test-event.json      # Fixtures for the end-to-end test
 ```
 
@@ -92,6 +95,13 @@ bash scripts/check-infra-change.sh origin/main
 
 # Update child rules (no deploy needed): edit child-rules.json, then
 source .env && bash scripts/upload-child-rules.sh
+
+# Change a dependency: edit the matching requirements.in, then regenerate its lockfile
+# (lambda first: tests/requirements.in is constrained to lambda/requirements.txt)
+pip install pip-tools
+pip-compile --generate-hashes --allow-unsafe --strip-extras lambda/requirements.in
+pip-compile --generate-hashes --allow-unsafe --strip-extras infrastructure/requirements.in
+(cd tests && pip-compile --generate-hashes --allow-unsafe --strip-extras requirements.in)
 
 # Admin only: create/refresh IAM, then full infrastructure deploy + one-time setup
 source .env && bash scripts/setup-iam.sh
@@ -144,7 +154,7 @@ Set these in your local shell before deploying (or via GitHub Actions secrets fo
 Unit tests cover the logic that needs no AWS: the sender allowlist and DMARC check, finding the original sender of a forward, child-rule matching and validation, grades, and the summary email. They run on every PR and before every deploy (`.github/workflows/tests.yml`).
 
 ```bash
-pip install -r tests/requirements.txt
+pip install --require-hashes -r tests/requirements.txt
 python -m pytest tests
 ```
 

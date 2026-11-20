@@ -19,8 +19,9 @@ updates:
     patterns: ["aws-cdk"]
     multi-ecosystem-group: "cdk"
 
-  # Lambda and test dependencies: one weekly PR. These only change the function's code,
-  # so they ship with a routine deploy.
+  # Lambda and test dependencies: one weekly PR. requirements.txt in each directory is a
+  # pip-compile lockfile with hashes; Dependabot edits requirements.in and recompiles it.
+  # These only change the function's code, so they ship with a routine deploy.
   - package-ecosystem: "pip"
     directories: ["/lambda", "/tests"]
     schedule:

@@ -58,7 +58,9 @@ stack_exists() {
 
 # ── Phase 2: Install CDK dependencies ─────────────────────────────────────
 echo "==> Installing CDK dependencies..."
-pip install -q -r "$REPO_ROOT/infrastructure/requirements.txt"
+# requirements.txt is a lockfile with hashes (compiled from requirements.in by pip-compile),
+# so every deploy installs exactly the reviewed versions of every package, direct or not.
+pip install -q --require-hashes -r "$REPO_ROOT/infrastructure/requirements.txt"
 
 # ── Phase 3: Build Lambda package ─────────────────────────────────────────
 # Must happen before any CDK command since app.py references dist/lambda at synth time.
@@ -69,7 +71,9 @@ mkdir -p "$LAMBDA_BUILD_DIR"
 # Always build for Lambda's platform (Linux x86_64, Python 3.14), not the machine running
 # this script — otherwise compiled packages (pydantic_core, jiter, lxml) get macOS or
 # wrong-Python binaries and the function fails at import.
-pip install -q -r "$REPO_ROOT/lambda/requirements.txt" -t "$LAMBDA_BUILD_DIR" \
+# lambda/requirements.txt is a hashed lockfile: the package is identical on every deploy
+# of the same commit, and a tampered or substituted wheel fails the install.
+pip install -q --require-hashes -r "$REPO_ROOT/lambda/requirements.txt" -t "$LAMBDA_BUILD_DIR" \
   --platform manylinux2014_x86_64 --implementation cp --python-version 3.14 \
   --only-binary=:all:
 cp "$REPO_ROOT/lambda/"*.py "$LAMBDA_BUILD_DIR/"

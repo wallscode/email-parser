@@ -1,0 +1,6 @@
+# Test dependencies. Compiled to requirements.txt (with hashes) by pip-compile:
+#   cd tests && pip-compile --generate-hashes --allow-unsafe --strip-extras requirements.in
+# The constraint keeps the Lambda packages at exactly the versions the function ships with.
+-c ../lambda/requirements.txt
+-r ../lambda/requirements.in
+pytest==9.2.0
