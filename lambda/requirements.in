@@ -1,7 +1,7 @@
 # Lambda dependencies. Edit this file, then regenerate the locked requirements.txt (with hashes):
 #   pip-compile --generate-hashes --allow-unsafe --strip-extras lambda/requirements.in
 
-anthropic==2.8.0
+anthropic==2.9.0
 boto3>=1.43.127
 python-docx>=1.2.0
 openpyxl>=3.1.5
