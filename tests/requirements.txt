@@ -10,9 +10,9 @@ annotated-types==0.8.0 \
     # via
     #   -c ../lambda/requirements.txt
     #   pydantic
-anthropic==2.9.0 \
-    --hash=sha256:0a3379add94953db2dc736839bbafb0c624f6bec69caf13e44353d906c253981 \
-    --hash=sha256:410281f4b9fa6422ccc465e5e531a00d69c6f589c743134e77c23fefc3e5cb4f
+anthropic==2.13.0 \
+    --hash=sha256:966718543d354aae57cba5b8b5693491b9538a55ac8d83d3ddc54448ae8f58e7 \
+    --hash=sha256:b9f61dc45a9630108f96135ecb726ffe1a6fd1f70dd2c9db5621eaaca62c16ec
     # via
     #   -c ../lambda/requirements.txt
     #   -r ../lambda/requirements.in
@@ -23,15 +23,15 @@ anyio==4.16.0 \
     #   -c ../lambda/requirements.txt
     #   anthropic
     #   httpx2
-boto3==1.44.7 \
-    --hash=sha256:15fac273416d37cd5e3f0c02b33fd8d7f27d3e64c5f64b911f8b953772302609 \
-    --hash=sha256:cc19922a2db90ac98f259b5290e08fcf7143a314eb6b2e430afec26a5d1f4e10
+boto3==1.44.10 \
+    --hash=sha256:2ec7370e9f387bf5ba3ae93024d18b3a9fd07eb697062d81165e3672f16a9335 \
+    --hash=sha256:4d5761c368ea199c2488401b86cfd966c132cbdb3c43b0390b25db69041f7989
     # via
     #   -c ../lambda/requirements.txt
     #   -r ../lambda/requirements.in
-botocore==1.44.7 \
-    --hash=sha256:3cbf1d9f50b5f1f95b715e570bc03b8c7c94b86777f96dd647321134f57290b2 \
-    --hash=sha256:56ec7cf3a7c0012c7e105c8f498c67077afa722df916dbdbe667b584fe7e5f99
+botocore==1.44.12 \
+    --hash=sha256:5806bb66bf167fa3172f4ddf78b088db9b22653702537b19969d02d2c3301ee5 \
+    --hash=sha256:d5df4cf868f2c4050999a0e6bc94e0a039017e719f4e27b2a8e87053856787b9
     # via
     #   -c ../lambda/requirements.txt
     #   boto3
