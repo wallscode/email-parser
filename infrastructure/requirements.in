@@ -1,5 +1,5 @@
 # CDK dependencies. Edit this file, then regenerate the locked requirements.txt (with hashes):
 #   pip-compile --generate-hashes --allow-unsafe --strip-extras infrastructure/requirements.in
 
-aws-cdk-lib==2.277.0
+aws-cdk-lib==2.278.0
 constructs==10.8.1
